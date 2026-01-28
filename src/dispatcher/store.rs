@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::dispatcher::DispatcherConfig;
 use crate::types::{
-    LeasedEvent, LeaseRequest, ReportOutcome, ReportRequest, TargetCircuitState,
+    LeaseRequest, LeasedEvent, ReportOutcome, ReportRequest, TargetCircuitState,
     TargetCircuitStatus, WebhookAttemptErrorKind, WebhookEvent, WebhookEventStatus,
 };
 
@@ -195,13 +195,13 @@ pub async fn report_delivery(
 
     let request_headers = serde_json::to_string(&req.attempt.request_headers)
         .map_err(|err| StoreError::Parse(format!("invalid request headers JSON: {err}")))?;
-    let response_headers = match &req.attempt.response_headers {
-        Some(headers) => Some(
-            serde_json::to_string(headers)
-                .map_err(|err| StoreError::Parse(format!("invalid response headers JSON: {err}")))?,
-        ),
-        None => None,
-    };
+    let response_headers =
+        match &req.attempt.response_headers {
+            Some(headers) => Some(serde_json::to_string(headers).map_err(|err| {
+                StoreError::Parse(format!("invalid response headers JSON: {err}"))
+            })?),
+            None => None,
+        };
     let error_kind = req
         .attempt
         .error_kind
@@ -226,10 +226,7 @@ pub async fn report_delivery(
         Some(format!(
             "max_attempts_exceeded ({}): {}",
             config.max_attempts,
-            req.attempt
-                .error_message
-                .as_deref()
-                .unwrap_or("unknown")
+            req.attempt.error_message.as_deref().unwrap_or("unknown")
         ))
     } else {
         None
@@ -502,7 +499,9 @@ fn parse_circuit_status(status: &str) -> Result<TargetCircuitStatus, StoreError>
     match status {
         "closed" => Ok(TargetCircuitStatus::Closed),
         "open" => Ok(TargetCircuitStatus::Open),
-        other => Err(StoreError::Parse(format!("unknown circuit status: {other}"))),
+        other => Err(StoreError::Parse(format!(
+            "unknown circuit status: {other}"
+        ))),
     }
 }
 

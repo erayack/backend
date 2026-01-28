@@ -7,6 +7,5 @@ fn export_bindings() {
     let ts_cfg =
         specta::ts::ExportConfiguration::default().bigint(specta::ts::BigIntExportBehavior::Number);
 
-    specta::export::ts_with_cfg(out_path, &ts_cfg)
-        .expect("failed to export Specta bindings");
+    specta::export::ts_with_cfg(out_path, &ts_cfg).expect("failed to export Specta bindings");
 }

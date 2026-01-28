@@ -101,7 +101,11 @@ pub async fn list_events(
     let rows: Vec<ListEventRow> = query.build_query_as().fetch_all(pool).await?;
 
     let has_more = rows.len() > params.limit as usize;
-    let take_count = if has_more { params.limit as usize } else { rows.len() };
+    let take_count = if has_more {
+        params.limit as usize
+    } else {
+        rows.len()
+    };
 
     let mut events = Vec::with_capacity(take_count);
     let mut last_cursor = None;
@@ -114,13 +118,13 @@ pub async fn list_events(
 
     let next_before = if has_more { last_cursor } else { None };
 
-    Ok(ListEventsResult { events, next_before })
+    Ok(ListEventsResult {
+        events,
+        next_before,
+    })
 }
 
-pub async fn get_event(
-    pool: &SqlitePool,
-    event_id: Uuid,
-) -> Result<GetEventResponse, StoreError> {
+pub async fn get_event(pool: &SqlitePool, event_id: Uuid) -> Result<GetEventResponse, StoreError> {
     let row = sqlx::query_as::<_, GetEventRow>(
         r#"
         SELECT
@@ -233,10 +237,8 @@ pub async fn replay_event(
             .lease_expires_at
             .as_deref()
             .ok_or_else(|| StoreError::Conflict("lease_missing".to_string()))?;
-        let expires =
-            chrono::DateTime::parse_from_rfc3339(lease_expires_at).map_err(|_| {
-                StoreError::Parse("invalid lease_expires_at".to_string())
-            })?;
+        let expires = chrono::DateTime::parse_from_rfc3339(lease_expires_at)
+            .map_err(|_| StoreError::Parse("invalid lease_expires_at".to_string()))?;
         if expires > now {
             return Err(StoreError::Conflict("lease_active".to_string()));
         }
@@ -326,7 +328,10 @@ pub async fn replay_event(
         endpoint_row.circuit_last_failure_at.as_deref(),
     )?;
 
-    Ok(ReplayEventResponse { event: summary, circuit })
+    Ok(ReplayEventResponse {
+        event: summary,
+        circuit,
+    })
 }
 
 #[derive(sqlx::FromRow)]
@@ -484,7 +489,9 @@ fn get_event_from_row(row: GetEventRow) -> Result<GetEventResponse, StoreError> 
     })
 }
 
-fn attempt_from_optional_row(row: ListAttemptsRow) -> Result<Option<WebhookAttemptLog>, StoreError> {
+fn attempt_from_optional_row(
+    row: ListAttemptsRow,
+) -> Result<Option<WebhookAttemptLog>, StoreError> {
     let Some(attempt_id) = row.attempt_id else {
         return Ok(None);
     };
@@ -588,7 +595,9 @@ fn parse_circuit_status(status: &str) -> Result<TargetCircuitStatus, StoreError>
     match status {
         "closed" => Ok(TargetCircuitStatus::Closed),
         "open" => Ok(TargetCircuitStatus::Open),
-        other => Err(StoreError::Parse(format!("unknown circuit status: {other}"))),
+        other => Err(StoreError::Parse(format!(
+            "unknown circuit status: {other}"
+        ))),
     }
 }
 

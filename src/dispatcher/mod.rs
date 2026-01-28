@@ -2,4 +2,4 @@ mod config;
 mod store;
 
 pub use config::DispatcherConfig;
-pub use store::{lease_events, report_delivery, ReportResult, StoreError};
+pub use store::{ReportResult, StoreError, lease_events, report_delivery};

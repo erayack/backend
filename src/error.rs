@@ -1,7 +1,7 @@
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde::Serialize;
 
@@ -31,7 +31,10 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::Conflict(message) => (StatusCode::CONFLICT, message),
             ApiError::NotFound(message) => (StatusCode::NOT_FOUND, message),
-            ApiError::Db(_) => (StatusCode::INTERNAL_SERVER_ERROR, "database error".to_string()),
+            ApiError::Db(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "database error".to_string(),
+            ),
             ApiError::Internal(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         };
 

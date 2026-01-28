@@ -4,9 +4,8 @@ use std::path::PathBuf;
 mod types;
 
 fn main() {
-    let out_dir = PathBuf::from(
-        "/Users/erayack/Desktop/code/modern-product-repo/packages/api/src/generated",
-    );
+    let out_dir =
+        PathBuf::from("/Users/erayack/Desktop/code/modern-product-repo/packages/api/src/generated");
 
     if !out_dir.is_dir() {
         println!(
@@ -19,8 +18,8 @@ fn main() {
     let out_file = out_dir.join("bindings.ts");
 
     let out_file_str = out_file.to_str().expect("bindings path is valid utf-8");
-    let ts_cfg = specta::ts::ExportConfiguration::default()
-        .bigint(specta::ts::BigIntExportBehavior::Number);
+    let ts_cfg =
+        specta::ts::ExportConfiguration::default().bigint(specta::ts::BigIntExportBehavior::Number);
     if let Err(err) = specta::export::ts_with_cfg(out_file_str, &ts_cfg) {
         if let specta::ts::TsExportError::Io(io_err) = &err {
             if io_err.kind() == std::io::ErrorKind::PermissionDenied {
@@ -31,7 +30,10 @@ fn main() {
                 return;
             }
         }
-        panic!("failed to export Specta bindings to {}: {err}", out_file.display());
+        panic!(
+            "failed to export Specta bindings to {}: {err}",
+            out_file.display()
+        );
     }
 
     println!("cargo:rerun-if-changed=build.rs");

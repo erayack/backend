@@ -1,15 +1,18 @@
 use axum::{
-    extract::{Path, Query, State},
     Json,
+    extract::{Path, Query, State},
 };
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::ApiError,
-    inspector::{get_event, list_attempts, list_events, replay_event, InspectorCursor, ListEventsParams, StoreError},
+    inspector::{
+        InspectorCursor, ListEventsParams, StoreError, get_event, list_attempts, list_events,
+        replay_event,
+    },
     state::AppState,
     types::{
         GetEventResponse, ListAttemptsResponse, ListEventsResponse, ReplayEventRequest,
@@ -53,7 +56,9 @@ pub async fn list_events_handler(
         Some(raw) => {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
-                return Err(ApiError::BadRequest("provider must be non-empty".to_string()));
+                return Err(ApiError::BadRequest(
+                    "provider must be non-empty".to_string(),
+                ));
             }
             Some(trimmed.to_string())
         }
@@ -120,14 +125,15 @@ pub async fn replay_event_handler(
 fn parse_limit(limit: Option<i64>) -> Result<i64, ApiError> {
     let limit = limit.unwrap_or(50);
     if !(1..=200).contains(&limit) {
-        return Err(ApiError::BadRequest("limit must be between 1 and 200".to_string()));
+        return Err(ApiError::BadRequest(
+            "limit must be between 1 and 200".to_string(),
+        ));
     }
     Ok(limit)
 }
 
 fn parse_uuid(field: &str, value: &str) -> Result<Uuid, ApiError> {
-    Uuid::parse_str(value)
-        .map_err(|_| ApiError::BadRequest(format!("{field} must be a UUID")))
+    Uuid::parse_str(value).map_err(|_| ApiError::BadRequest(format!("{field} must be a UUID")))
 }
 
 fn parse_status(value: &str) -> Result<WebhookEventStatus, ApiError> {

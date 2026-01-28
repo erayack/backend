@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use chrono::{Duration, Utc};
 use receiver::{
-    dispatcher::{lease_events, report_delivery, DispatcherConfig},
+    dispatcher::{DispatcherConfig, lease_events, report_delivery},
     types::{LeaseRequest, ReportAttempt, ReportOutcome, ReportRequest, WebhookEventStatus},
 };
 use sqlx::{
@@ -99,7 +99,16 @@ async fn seed_event(
     lease_expires_at: Option<&str>,
     leased_by: Option<&str>,
 ) -> Uuid {
-    seed_event_with_attempts(pool, endpoint_id, status, next_attempt_at, lease_expires_at, leased_by, 0).await
+    seed_event_with_attempts(
+        pool,
+        endpoint_id,
+        status,
+        next_attempt_at,
+        lease_expires_at,
+        leased_by,
+        0,
+    )
+    .await
 }
 
 async fn seed_event_with_attempts(
@@ -512,13 +521,11 @@ async fn report_happy_path_delivered() {
     .await
     .expect("event should exist");
 
-    assert_eq!(
-        event_row.0, "delivered",
-        "event status should be delivered"
-    );
+    assert_eq!(event_row.0, "delivered", "event status should be delivered");
     assert_eq!(event_row.1, 1, "attempts should be incremented to 1");
     assert_eq!(
-        event_row.2, endpoint_id.to_string(),
+        event_row.2,
+        endpoint_id.to_string(),
         "endpoint_id should remain unchanged"
     );
 
@@ -539,7 +546,10 @@ async fn report_happy_path_delivered() {
         lease_fields.0.is_none(),
         "lease_expires_at should be cleared (NULL)"
     );
-    assert!(lease_fields.1.is_none(), "leased_by should be cleared (NULL)");
+    assert!(
+        lease_fields.1.is_none(),
+        "leased_by should be cleared (NULL)"
+    );
 
     // Stage 8: Assertion Group 4 - last_error Cleared
     let last_error = sqlx::query_scalar::<_, Option<String>>(
@@ -703,7 +713,10 @@ async fn report_retry_path() {
     .await
     .expect("event should exist");
 
-    assert!(lease_fields.0.is_none(), "lease_expires_at should be cleared");
+    assert!(
+        lease_fields.0.is_none(),
+        "lease_expires_at should be cleared"
+    );
     assert!(lease_fields.1.is_none(), "leased_by should be cleared");
 
     // Assertion 5: last_error set
@@ -791,7 +804,10 @@ async fn report_lease_ownership_conflict_wrong_worker() {
         Some("original-worker"),
         "leased_by should be unchanged"
     );
-    assert!(event_row.2.is_some(), "lease_expires_at should be unchanged");
+    assert!(
+        event_row.2.is_some(),
+        "lease_expires_at should be unchanged"
+    );
 }
 
 #[tokio::test]
@@ -834,7 +850,10 @@ async fn report_lease_ownership_conflict_expired_lease() {
 
     let config = DispatcherConfig::default();
     let result = report_delivery(&pool, &config, &report_req).await;
-    assert!(result.is_err(), "report should fail with conflict for expired lease");
+    assert!(
+        result.is_err(),
+        "report should fail with conflict for expired lease"
+    );
 
     let attempt_count = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM webhook_attempt_logs WHERE event_id = ?",
@@ -859,7 +878,10 @@ async fn report_lease_ownership_conflict_expired_lease() {
         Some("test-worker"),
         "leased_by should be unchanged"
     );
-    assert!(event_row.2.is_some(), "lease_expires_at should be unchanged");
+    assert!(
+        event_row.2.is_some(),
+        "lease_expires_at should be unchanged"
+    );
 }
 
 #[tokio::test]
@@ -927,7 +949,11 @@ async fn report_max_attempts_forces_dead() {
     assert_eq!(event_row.0, "dead", "status should be dead");
     assert_eq!(event_row.1, 5, "attempts should be 5");
     assert!(
-        event_row.2.as_ref().unwrap().contains("max_attempts_exceeded"),
+        event_row
+            .2
+            .as_ref()
+            .unwrap()
+            .contains("max_attempts_exceeded"),
         "last_error should contain max_attempts_exceeded"
     );
 }
@@ -1064,7 +1090,11 @@ async fn report_max_attempts_overrides_delivered() {
     assert_eq!(event_row.0, "dead", "status should be dead");
     assert_eq!(event_row.1, 5, "attempts should be 5");
     assert!(
-        event_row.2.as_ref().unwrap().contains("max_attempts_exceeded"),
+        event_row
+            .2
+            .as_ref()
+            .unwrap()
+            .contains("max_attempts_exceeded"),
         "last_error should contain max_attempts_exceeded"
     );
 }
@@ -1078,7 +1108,15 @@ async fn report_final_outcome_returned_in_result() {
     let now = Utc::now();
     let lease_expires_at = (now + Duration::hours(1)).to_rfc3339();
 
-    let event_id = seed_event(&pool, endpoint_id, "in_flight", None, Some(&lease_expires_at), Some("worker")).await;
+    let event_id = seed_event(
+        &pool,
+        endpoint_id,
+        "in_flight",
+        None,
+        Some(&lease_expires_at),
+        Some("worker"),
+    )
+    .await;
 
     let config = DispatcherConfig::default();
     let report_req = ReportRequest {
@@ -1104,5 +1142,9 @@ async fn report_final_outcome_returned_in_result() {
         .await
         .expect("report should succeed");
 
-    assert_eq!(result.final_outcome, ReportOutcome::Delivered, "final_outcome should match reported outcome");
+    assert_eq!(
+        result.final_outcome,
+        ReportOutcome::Delivered,
+        "final_outcome should match reported outcome"
+    );
 }

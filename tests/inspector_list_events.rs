@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use chrono::{Duration, Utc};
 use receiver::{
-    inspector::{get_event, list_events, ListEventsParams, StoreError},
+    inspector::{ListEventsParams, StoreError, get_event, list_events},
     types::WebhookEventStatus,
 };
 use sqlx::{
-    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
     Connection, SqliteConnection, SqlitePool,
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 use std::fs;
 use tempfile::NamedTempFile;
@@ -116,7 +116,12 @@ async fn seed_event(
     id
 }
 
-async fn seed_circuit_state(pool: &SqlitePool, endpoint_id: Uuid, state: &str, open_until: Option<&str>) {
+async fn seed_circuit_state(
+    pool: &SqlitePool,
+    endpoint_id: Uuid,
+    state: &str,
+    open_until: Option<&str>,
+) {
     sqlx::query(
         r#"
         INSERT INTO target_circuit_states (endpoint_id, state, open_until, consecutive_failures, last_failure_at)
@@ -242,9 +247,30 @@ async fn list_events_filters_by_status() {
     let db = setup_db().await;
     let endpoint_id = seed_endpoint(&db.pool, "https://example.com/hook").await;
     let now = Utc::now();
-    seed_event(&db.pool, endpoint_id, "stripe", "pending", &now.to_rfc3339()).await;
-    seed_event(&db.pool, endpoint_id, "stripe", "delivered", &(now - Duration::seconds(1)).to_rfc3339()).await;
-    seed_event(&db.pool, endpoint_id, "stripe", "dead", &(now - Duration::seconds(2)).to_rfc3339()).await;
+    seed_event(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "pending",
+        &now.to_rfc3339(),
+    )
+    .await;
+    seed_event(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "delivered",
+        &(now - Duration::seconds(1)).to_rfc3339(),
+    )
+    .await;
+    seed_event(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "dead",
+        &(now - Duration::seconds(2)).to_rfc3339(),
+    )
+    .await;
 
     let params = ListEventsParams {
         limit: 50,
@@ -288,8 +314,22 @@ async fn list_events_filters_by_provider() {
     let db = setup_db().await;
     let endpoint_id = seed_endpoint(&db.pool, "https://example.com/hook").await;
     let now = Utc::now();
-    seed_event(&db.pool, endpoint_id, "stripe", "pending", &now.to_rfc3339()).await;
-    seed_event(&db.pool, endpoint_id, "github", "pending", &(now - Duration::seconds(1)).to_rfc3339()).await;
+    seed_event(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "pending",
+        &now.to_rfc3339(),
+    )
+    .await;
+    seed_event(
+        &db.pool,
+        endpoint_id,
+        "github",
+        "pending",
+        &(now - Duration::seconds(1)).to_rfc3339(),
+    )
+    .await;
 
     let params = ListEventsParams {
         limit: 50,
@@ -383,9 +423,30 @@ async fn list_events_ordering_desc() {
     let db = setup_db().await;
     let endpoint_id = seed_endpoint(&db.pool, "https://example.com/hook").await;
     let now = Utc::now();
-    let oldest = seed_event(&db.pool, endpoint_id, "stripe", "pending", &(now - Duration::seconds(2)).to_rfc3339()).await;
-    let middle = seed_event(&db.pool, endpoint_id, "stripe", "pending", &(now - Duration::seconds(1)).to_rfc3339()).await;
-    let newest = seed_event(&db.pool, endpoint_id, "stripe", "pending", &now.to_rfc3339()).await;
+    let oldest = seed_event(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "pending",
+        &(now - Duration::seconds(2)).to_rfc3339(),
+    )
+    .await;
+    let middle = seed_event(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "pending",
+        &(now - Duration::seconds(1)).to_rfc3339(),
+    )
+    .await;
+    let newest = seed_event(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "pending",
+        &now.to_rfc3339(),
+    )
+    .await;
 
     let params = ListEventsParams {
         limit: 50,

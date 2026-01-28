@@ -1,8 +1,8 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use chrono::DateTime;
 
 use crate::{
-    dispatcher::{lease_events, report_delivery, StoreError},
+    dispatcher::{StoreError, lease_events, report_delivery},
     error::ApiError,
     state::AppState,
     types::{LeaseRequest, LeaseResponse, ReportRequest, ReportResponse},
@@ -76,9 +76,8 @@ fn validate_report_request(req: &ReportRequest) -> Result<(), ApiError> {
 }
 
 fn parse_rfc3339(field: &str, value: &str) -> Result<DateTime<chrono::FixedOffset>, ApiError> {
-    DateTime::parse_from_rfc3339(value).map_err(|_| {
-        ApiError::BadRequest(format!("{field} must be RFC3339"))
-    })
+    DateTime::parse_from_rfc3339(value)
+        .map_err(|_| ApiError::BadRequest(format!("{field} must be RFC3339")))
 }
 
 fn map_store_error(err: StoreError) -> ApiError {

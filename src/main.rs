@@ -1,6 +1,6 @@
 use axum::{
-    routing::{get, post},
     Router,
+    routing::{get, post},
 };
 use receiver::{
     dispatcher::DispatcherConfig,
@@ -17,8 +17,8 @@ use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite:receiver.db".to_string());
+    let database_url =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:receiver.db".to_string());
     let bind_addr = std::env::var("RECEIVER_INTERNAL_BIND_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:3001".to_string());
 
