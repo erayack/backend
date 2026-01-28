@@ -63,4 +63,5 @@ pub enum ReportOutcome {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct ReportResponse {
     pub circuit: Option<TargetCircuitState>,
+    pub final_outcome: ReportOutcome,
 }

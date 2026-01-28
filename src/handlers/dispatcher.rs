@@ -27,11 +27,14 @@ pub async fn report_handler(
 ) -> Result<Json<ReportResponse>, ApiError> {
     validate_report_request(&req)?;
 
-    let circuit = report_delivery(&state.pool, &state.dispatcher, &req)
+    let result = report_delivery(&state.pool, &state.dispatcher, &req)
         .await
         .map_err(map_store_error)?;
 
-    Ok(Json(ReportResponse { circuit }))
+    Ok(Json(ReportResponse {
+        circuit: result.circuit,
+        final_outcome: result.final_outcome,
+    }))
 }
 
 fn validate_request(req: &LeaseRequest) -> Result<(), ApiError> {

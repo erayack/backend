@@ -145,11 +145,16 @@ pub async fn lease_events(
     rows.into_iter().map(LeaseRow::try_into).collect()
 }
 
+pub struct ReportResult {
+    pub circuit: Option<TargetCircuitState>,
+    pub final_outcome: ReportOutcome,
+}
+
 pub async fn report_delivery(
     pool: &SqlitePool,
     config: &DispatcherConfig,
     req: &ReportRequest,
-) -> Result<Option<TargetCircuitState>, StoreError> {
+) -> Result<ReportResult, StoreError> {
     let now = Utc::now();
     let now_str = format_utc(now);
     let event_id = req.event_id.to_string();
@@ -210,7 +215,27 @@ pub async fn report_delivery(
 
     let retryable = req.retryable;
 
-    match req.outcome {
+    let exhausted = attempt_no >= config.max_attempts as i64;
+    let final_outcome = if exhausted && matches!(req.outcome, ReportOutcome::Retry) {
+        ReportOutcome::Dead
+    } else {
+        req.outcome
+    };
+
+    let last_error_for_exhausted = if exhausted && matches!(req.outcome, ReportOutcome::Retry) {
+        Some(format!(
+            "max_attempts_exceeded ({}): {}",
+            config.max_attempts,
+            req.attempt
+                .error_message
+                .as_deref()
+                .unwrap_or("unknown")
+        ))
+    } else {
+        None
+    };
+
+    match final_outcome {
         ReportOutcome::Delivered => {
             let result = sqlx::query(
                 r#"
@@ -303,10 +328,9 @@ pub async fn report_delivery(
             .await?;
         }
         ReportOutcome::Dead => {
-            let last_error = req
-                .attempt
-                .error_message
+            let last_error = last_error_for_exhausted
                 .clone()
+                .or_else(|| req.attempt.error_message.clone())
                 .or_else(|| error_kind.clone());
 
             let result = sqlx::query(
@@ -380,7 +404,10 @@ pub async fn report_delivery(
 
     tx.commit().await?;
 
-    Ok(circuit_state)
+    Ok(ReportResult {
+        circuit: circuit_state,
+        final_outcome,
+    })
 }
 
 #[derive(sqlx::FromRow)]
