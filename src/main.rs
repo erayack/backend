@@ -1,7 +1,15 @@
-use axum::{routing::post, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use receiver::{
     dispatcher::DispatcherConfig,
-    handlers::dispatcher::{lease_handler, report_handler},
+    handlers::{
+        dispatcher::{lease_handler, report_handler},
+        inspector::{
+            get_event_handler, list_attempts_handler, list_events_handler, replay_event_handler,
+        },
+    },
     state::AppState,
 };
 use sqlx::sqlite::SqlitePoolOptions;
@@ -31,6 +39,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/internal/dispatcher/lease", post(lease_handler))
         .route("/internal/dispatcher/report", post(report_handler))
+        .route("/api/inspector/events", get(list_events_handler))
+        .route("/api/inspector/events/:event_id", get(get_event_handler))
+        .route(
+            "/api/inspector/events/:event_id/attempts",
+            get(list_attempts_handler),
+        )
+        .route(
+            "/api/inspector/events/:event_id/replay",
+            post(replay_event_handler),
+        )
         .with_state(state);
 
     let addr: SocketAddr = bind_addr.parse()?;
