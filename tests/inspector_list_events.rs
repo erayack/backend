@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::needless_raw_string_hashes)]
+
 use std::collections::BTreeMap;
 
 use chrono::{Duration, Utc};

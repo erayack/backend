@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::needless_raw_string_hashes)]
+
 use std::collections::{BTreeMap, HashSet};
 
 use chrono::{Duration, Utc};
@@ -58,7 +60,7 @@ async fn setup_db_shared(max_connections: u32) -> TestDb {
 
 async fn run_migrations_on_conn(conn: &mut SqliteConnection) -> Result<(), sqlx::Error> {
     let mut entries: Vec<_> = fs::read_dir("migrations")
-        .map_err(|err| sqlx::Error::Io(err))?
+        .map_err(sqlx::Error::Io)?
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("sql"))
         .collect();
@@ -66,7 +68,7 @@ async fn run_migrations_on_conn(conn: &mut SqliteConnection) -> Result<(), sqlx:
     entries.sort_by_key(|entry| entry.file_name());
 
     for entry in entries {
-        let contents = fs::read_to_string(entry.path()).map_err(|err| sqlx::Error::Io(err))?;
+        let contents = fs::read_to_string(entry.path()).map_err(sqlx::Error::Io)?;
         for statement in contents.split(';') {
             let statement = statement.trim();
             if statement.is_empty() {

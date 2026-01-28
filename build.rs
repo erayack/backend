@@ -16,24 +16,26 @@ fn main() {
     }
 
     let out_file = out_dir.join("bindings.ts");
-
-    let out_file_str = out_file.to_str().expect("bindings path is valid utf-8");
+    let out_file_str = out_file.to_string_lossy().into_owned();
     let ts_cfg =
         specta::ts::ExportConfiguration::default().bigint(specta::ts::BigIntExportBehavior::Number);
-    if let Err(err) = specta::export::ts_with_cfg(out_file_str, &ts_cfg) {
-        if let specta::ts::TsExportError::Io(io_err) = &err {
-            if io_err.kind() == std::io::ErrorKind::PermissionDenied {
-                println!(
-                    "cargo:warning=Specta bindings output not writable; skipping generation: {}",
-                    out_file.display()
-                );
-                return;
-            }
+    match specta::export::ts_with_cfg(&out_file_str, &ts_cfg) {
+        Ok(()) => {}
+        Err(specta::ts::TsExportError::Io(io_err))
+            if io_err.kind() == std::io::ErrorKind::PermissionDenied =>
+        {
+            println!(
+                "cargo:warning=Specta bindings output not writable; skipping generation: {}",
+                out_file.display()
+            );
         }
-        panic!(
-            "failed to export Specta bindings to {}: {err}",
-            out_file.display()
-        );
+        Err(err) => {
+            println!(
+                "cargo:warning=failed to export Specta bindings to {}: {err}",
+                out_file.display()
+            );
+            std::process::exit(1);
+        }
     }
 
     println!("cargo:rerun-if-changed=build.rs");

@@ -1172,6 +1172,7 @@ dependencies = [
  "specta 1.0.5",
  "specta-typescript",
  "sqlx",
+ "subtle",
  "tempfile",
  "tokio",
  "uuid",

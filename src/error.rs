@@ -10,6 +10,7 @@ pub enum ApiError {
     BadRequest(String),
     Conflict(String),
     NotFound(String),
+    Unauthorized(String),
     Db(sqlx::Error),
     Internal(String),
 }
@@ -31,6 +32,7 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::Conflict(message) => (StatusCode::CONFLICT, message),
             ApiError::NotFound(message) => (StatusCode::NOT_FOUND, message),
+            ApiError::Unauthorized(message) => (StatusCode::UNAUTHORIZED, message),
             ApiError::Db(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "database error".to_string(),

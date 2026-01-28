@@ -35,7 +35,7 @@ pub async fn lease_events(
     let mut tx = pool.begin().await?;
 
     sqlx::query(
-        r#"
+        r"
         UPDATE webhook_events
         SET status = 'requeued',
             lease_expires_at = NULL,
@@ -43,28 +43,28 @@ pub async fn lease_events(
         WHERE status = 'in_flight'
             AND lease_expires_at IS NOT NULL
             AND lease_expires_at <= ?
-        "#,
+        ",
     )
     .bind(&now_str)
     .execute(&mut *tx)
     .await?;
 
     sqlx::query(
-        r#"
+        r"
         UPDATE target_circuit_states
         SET state = 'closed',
             open_until = NULL
         WHERE state = 'open'
           AND open_until IS NOT NULL
           AND open_until <= ?
-        "#,
+        ",
     )
     .bind(&now_str)
     .execute(&mut *tx)
     .await?;
 
     let leased_ids: Vec<String> = sqlx::query_scalar(
-        r#"
+        r"
         WITH eligible AS (
             SELECT e.id
             FROM webhook_events e
@@ -90,7 +90,7 @@ pub async fn lease_events(
             AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
             AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
         RETURNING id
-        "#,
+        ",
     )
     .bind(&now_str)
     .bind(&now_str)
@@ -163,11 +163,11 @@ pub async fn report_delivery(
     let mut circuit_state: Option<TargetCircuitState> = None;
 
     let row = sqlx::query_as::<_, ReportEventRow>(
-        r#"
+        r"
         SELECT endpoint_id, attempts, leased_by, lease_expires_at
         FROM webhook_events
         WHERE id = ?
-        "#,
+        ",
     )
     .bind(&event_id)
     .fetch_optional(&mut *tx)
@@ -187,10 +187,10 @@ pub async fn report_delivery(
         .as_deref()
         .ok_or_else(|| StoreError::Conflict("lease_missing".to_string()))?;
 
-    if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(lease_expires_at) {
-        if expires <= now {
-            return Err(StoreError::Conflict("lease_expired".to_string()));
-        }
+    if let Ok(expires) = chrono::DateTime::parse_from_rfc3339(lease_expires_at)
+        && expires <= now
+    {
+        return Err(StoreError::Conflict("lease_expired".to_string()));
     }
 
     let request_headers = serde_json::to_string(&req.attempt.request_headers)
@@ -215,7 +215,7 @@ pub async fn report_delivery(
 
     let retryable = req.retryable;
 
-    let exhausted = attempt_no >= config.max_attempts as i64;
+    let exhausted = attempt_no >= i64::from(config.max_attempts);
     let final_outcome = if exhausted {
         ReportOutcome::Dead
     } else {
@@ -235,7 +235,7 @@ pub async fn report_delivery(
     match final_outcome {
         ReportOutcome::Delivered => {
             let result = sqlx::query(
-                r#"
+                r"
                 UPDATE webhook_events
                 SET status = 'delivered',
                     attempts = attempts + 1,
@@ -245,7 +245,7 @@ pub async fn report_delivery(
                     last_error = NULL
                 WHERE id = ?
                   AND leased_by = ?
-                "#,
+                ",
             )
             .bind(&event_id)
             .bind(&req.worker_id)
@@ -256,14 +256,14 @@ pub async fn report_delivery(
             }
 
             let updated = sqlx::query(
-                r#"
+                r"
                 UPDATE target_circuit_states
                 SET state = 'closed',
                     open_until = NULL,
                     consecutive_failures = 0,
                     last_failure_at = NULL
                 WHERE endpoint_id = ?
-                "#,
+                ",
             )
             .bind(&row.endpoint_id)
             .execute(&mut *tx)
@@ -291,7 +291,7 @@ pub async fn report_delivery(
                 .or_else(|| error_kind.clone());
 
             let result = sqlx::query(
-                r#"
+                r"
                 UPDATE webhook_events
                 SET status = 'pending',
                     attempts = attempts + 1,
@@ -301,7 +301,7 @@ pub async fn report_delivery(
                     last_error = ?
                 WHERE id = ?
                   AND leased_by = ?
-                "#,
+                ",
             )
             .bind(next_attempt_at)
             .bind(last_error.as_deref())
@@ -331,7 +331,7 @@ pub async fn report_delivery(
                 .or_else(|| error_kind.clone());
 
             let result = sqlx::query(
-                r#"
+                r"
                 UPDATE webhook_events
                 SET status = 'dead',
                     attempts = attempts + 1,
@@ -341,7 +341,7 @@ pub async fn report_delivery(
                     last_error = ?
                 WHERE id = ?
                   AND leased_by = ?
-                "#,
+                ",
             )
             .bind(last_error.as_deref())
             .bind(&event_id)
@@ -366,7 +366,7 @@ pub async fn report_delivery(
     }
 
     sqlx::query(
-        r#"
+        r"
         INSERT INTO webhook_attempt_logs (
             id,
             event_id,
@@ -382,7 +382,7 @@ pub async fn report_delivery(
             error_message
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        "#,
+        ",
     )
     .bind(&attempt_id)
     .bind(&event_id)
@@ -528,7 +528,7 @@ fn error_kind_to_str(kind: WebhookAttemptErrorKind) -> &'static str {
 }
 
 fn compute_cooldown_ms(config: &DispatcherConfig, consecutive_failures: i64) -> u64 {
-    let threshold = config.circuit_failure_threshold as i64;
+    let threshold = i64::from(config.circuit_failure_threshold);
     if consecutive_failures < threshold {
         return 0;
     }
@@ -556,20 +556,20 @@ async fn update_circuit_on_failure(
     }
 
     let row = sqlx::query_as::<_, CircuitRow>(
-        r#"
+        r"
         SELECT consecutive_failures
         FROM target_circuit_states
         WHERE endpoint_id = ?
-        "#,
+        ",
     )
     .bind(endpoint_id)
     .fetch_optional(&mut **tx)
     .await?;
 
-    let current_failures = row.map(|row| row.consecutive_failures).unwrap_or(0);
+    let current_failures = row.map_or(0, |row| row.consecutive_failures);
     let consecutive_failures = current_failures + 1;
     let cooldown_ms = compute_cooldown_ms(config, consecutive_failures);
-    let should_open = consecutive_failures >= config.circuit_failure_threshold as i64;
+    let should_open = consecutive_failures >= i64::from(config.circuit_failure_threshold);
     let open_until = if should_open {
         Some(format_utc(now + Duration::milliseconds(cooldown_ms as i64)))
     } else {
@@ -582,7 +582,7 @@ async fn update_circuit_on_failure(
     };
 
     sqlx::query(
-        r#"
+        r"
         INSERT INTO target_circuit_states (
             endpoint_id,
             state,
@@ -596,7 +596,7 @@ async fn update_circuit_on_failure(
             open_until = excluded.open_until,
             consecutive_failures = excluded.consecutive_failures,
             last_failure_at = excluded.last_failure_at
-        "#,
+        ",
     )
     .bind(endpoint_id)
     .bind(match state {

@@ -126,7 +126,7 @@ pub async fn list_events(
 
 pub async fn get_event(pool: &SqlitePool, event_id: Uuid) -> Result<GetEventResponse, StoreError> {
     let row = sqlx::query_as::<_, GetEventRow>(
-        r#"
+        r"
         SELECT
             e.id,
             e.endpoint_id,
@@ -149,7 +149,7 @@ pub async fn get_event(pool: &SqlitePool, event_id: Uuid) -> Result<GetEventResp
         JOIN endpoints ep ON ep.id = e.endpoint_id
         LEFT JOIN target_circuit_states c ON c.endpoint_id = e.endpoint_id
         WHERE e.id = ?
-        "#,
+        ",
     )
     .bind(event_id.to_string())
     .fetch_optional(pool)
@@ -164,7 +164,7 @@ pub async fn list_attempts(
     event_id: Uuid,
 ) -> Result<ListAttemptsResponse, StoreError> {
     let rows = sqlx::query_as::<_, ListAttemptsRow>(
-        r#"
+        r"
         SELECT \
             e.id AS event_id, \
             a.id AS attempt_id, \
@@ -182,7 +182,7 @@ pub async fn list_attempts(
         LEFT JOIN webhook_attempt_logs a ON a.event_id = e.id
         WHERE e.id = ?
         ORDER BY a.started_at ASC, a.attempt_no ASC
-        "#,
+        ",
     )
     .bind(event_id.to_string())
     .fetch_all(pool)
@@ -212,7 +212,7 @@ pub async fn replay_event(
     let mut tx = pool.begin().await?;
 
     let row = sqlx::query_as::<_, ReplaySourceRow>(
-        r#"
+        r"
         SELECT \
             id, \
             endpoint_id, \
@@ -224,7 +224,7 @@ pub async fn replay_event(
             lease_expires_at \
         FROM webhook_events
         WHERE id = ?
-        "#,
+        ",
     )
     .bind(event_id.to_string())
     .fetch_optional(&mut *tx)
@@ -246,7 +246,7 @@ pub async fn replay_event(
 
     let new_event_id = Uuid::new_v4();
     sqlx::query(
-        r#"
+        r"
         INSERT INTO webhook_events (
             id,
             endpoint_id,
@@ -262,7 +262,7 @@ pub async fn replay_event(
             last_error
         )
         VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, NULL, NULL)
-        "#,
+        ",
     )
     .bind(new_event_id.to_string())
     .bind(&row.endpoint_id)
@@ -275,14 +275,14 @@ pub async fn replay_event(
 
     if reset_circuit {
         sqlx::query(
-            r#"
+            r"
             UPDATE target_circuit_states
             SET state = 'closed',
                 open_until = NULL,
                 consecutive_failures = 0,
                 last_failure_at = NULL
             WHERE endpoint_id = ?
-            "#,
+            ",
         )
         .bind(&row.endpoint_id)
         .execute(&mut *tx)
@@ -290,7 +290,7 @@ pub async fn replay_event(
     }
 
     let endpoint_row = sqlx::query_as::<_, ReplayEndpointRow>(
-        r#"
+        r"
         SELECT ep.target_url,
                c.state AS circuit_state,
                c.open_until AS circuit_open_until,
@@ -299,7 +299,7 @@ pub async fn replay_event(
         FROM endpoints ep
         LEFT JOIN target_circuit_states c ON c.endpoint_id = ep.id
         WHERE ep.id = ?
-        "#,
+        ",
     )
     .bind(&row.endpoint_id)
     .fetch_optional(&mut *tx)

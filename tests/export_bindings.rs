@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used)]
+
 #[path = "../src/types/mod.rs"]
 mod types;
 

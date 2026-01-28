@@ -6,4 +6,5 @@ use crate::dispatcher::DispatcherConfig;
 pub struct AppState {
     pub pool: SqlitePool,
     pub dispatcher: DispatcherConfig,
+    pub inspector_api_token: Option<String>,
 }
