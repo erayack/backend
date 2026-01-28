@@ -22,7 +22,16 @@ pub async fn inspector_auth(
         .headers()
         .get(AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
+        .and_then(|value| {
+            let trimmed = value.trim_start();
+            if trimmed.len() >= 7
+                && trimmed[..7].eq_ignore_ascii_case("bearer ")
+            {
+                Some(trimmed[7..].trim())
+            } else {
+                None
+            }
+        })
     {
         Some(token) => token,
         _ => {
@@ -32,7 +41,7 @@ pub async fn inspector_auth(
         }
     };
 
-    if !constant_time_eq(expected_token.as_bytes(), provided_token.trim().as_bytes()) {
+    if !constant_time_eq(expected_token.as_bytes(), provided_token.as_bytes()) {
         return Err(ApiError::Unauthorized("invalid token".to_string()));
     }
 

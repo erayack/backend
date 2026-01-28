@@ -1167,6 +1167,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "chrono",
+ "http-body-util",
  "serde",
  "serde_json",
  "specta 1.0.5",
@@ -1175,6 +1176,7 @@ dependencies = [
  "subtle",
  "tempfile",
  "tokio",
+ "tower",
  "uuid",
 ]
 
