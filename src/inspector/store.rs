@@ -123,27 +123,27 @@ pub async fn get_event(
 ) -> Result<GetEventResponse, StoreError> {
     let row = sqlx::query_as::<_, GetEventRow>(
         r#"
-        SELECT \
-            e.id, \
-            e.endpoint_id, \
-            e.provider, \
-            e.headers, \
-            e.payload, \
-            e.status, \
-            e.attempts, \
-            e.received_at, \
-            e.next_attempt_at, \
-            e.lease_expires_at, \
-            e.leased_by, \
-            e.last_error, \
-            ep.target_url, \
-            c.state AS circuit_state, \
-            c.open_until AS circuit_open_until, \
-            c.consecutive_failures AS circuit_consecutive_failures, \
-            c.last_failure_at AS circuit_last_failure_at \
-        FROM webhook_events e \
-        JOIN endpoints ep ON ep.id = e.endpoint_id \
-        LEFT JOIN target_circuit_states c ON c.endpoint_id = e.endpoint_id \
+        SELECT
+            e.id,
+            e.endpoint_id,
+            e.provider,
+            e.headers,
+            e.payload,
+            e.status,
+            e.attempts,
+            e.received_at,
+            e.next_attempt_at,
+            e.lease_expires_at,
+            e.leased_by,
+            e.last_error,
+            ep.target_url,
+            c.state AS circuit_state,
+            c.open_until AS circuit_open_until,
+            c.consecutive_failures AS circuit_consecutive_failures,
+            c.last_failure_at AS circuit_last_failure_at
+        FROM webhook_events e
+        JOIN endpoints ep ON ep.id = e.endpoint_id
+        LEFT JOIN target_circuit_states c ON c.endpoint_id = e.endpoint_id
         WHERE e.id = ?
         "#,
     )
@@ -384,6 +384,7 @@ struct ListAttemptsRow {
 }
 
 #[derive(sqlx::FromRow)]
+#[allow(dead_code)]
 struct ReplaySourceRow {
     id: String,
     endpoint_id: String,
@@ -396,6 +397,7 @@ struct ReplaySourceRow {
 }
 
 #[derive(sqlx::FromRow)]
+#[allow(dead_code)]
 struct ReplayEndpointRow {
     target_url: String,
     circuit_state: Option<String>,

@@ -12,7 +12,7 @@ pub struct TargetCircuitState {
     pub last_failure_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum TargetCircuitStatus {
     Closed,
