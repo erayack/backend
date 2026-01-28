@@ -99,6 +99,18 @@ async fn seed_event(
     lease_expires_at: Option<&str>,
     leased_by: Option<&str>,
 ) -> Uuid {
+    seed_event_with_attempts(pool, endpoint_id, status, next_attempt_at, lease_expires_at, leased_by, 0).await
+}
+
+async fn seed_event_with_attempts(
+    pool: &SqlitePool,
+    endpoint_id: Uuid,
+    status: &str,
+    next_attempt_at: Option<&str>,
+    lease_expires_at: Option<&str>,
+    leased_by: Option<&str>,
+    attempts: i64,
+) -> Uuid {
     let id = Uuid::new_v4();
     let headers =
         serde_json::to_string(&BTreeMap::<String, String>::new()).expect("serialize headers");
@@ -129,7 +141,7 @@ async fn seed_event(
     .bind(headers)
     .bind("{}")
     .bind(status)
-    .bind(0_i64)
+    .bind(attempts)
     .bind(received_at)
     .bind(next_attempt_at)
     .bind(lease_expires_at)
@@ -848,4 +860,249 @@ async fn report_lease_ownership_conflict_expired_lease() {
         "leased_by should be unchanged"
     );
     assert!(event_row.2.is_some(), "lease_expires_at should be unchanged");
+}
+
+#[tokio::test]
+async fn report_max_attempts_forces_dead() {
+    let test_db = setup_db_shared(1).await;
+    let pool = test_db.pool;
+    let endpoint_id = seed_endpoint(&pool).await;
+
+    let now = Utc::now();
+    let lease_expires_at = (now + Duration::hours(1)).to_rfc3339();
+
+    let event_id = seed_event_with_attempts(
+        &pool,
+        endpoint_id,
+        "in_flight",
+        None,
+        Some(&lease_expires_at),
+        Some("test-worker"),
+        4,
+    )
+    .await;
+
+    let config = DispatcherConfig {
+        max_attempts: 5,
+        ..Default::default()
+    };
+
+    let report_req = ReportRequest {
+        worker_id: "test-worker".to_string(),
+        event_id,
+        outcome: ReportOutcome::Retry,
+        retryable: true,
+        next_attempt_at: Some((now + Duration::minutes(5)).to_rfc3339()),
+        attempt: ReportAttempt {
+            started_at: now.to_rfc3339(),
+            finished_at: now.to_rfc3339(),
+            request_headers: BTreeMap::new(),
+            request_body: "{}".to_string(),
+            response_status: Some(503),
+            response_headers: None,
+            response_body: Some("Service Unavailable".to_string()),
+            error_kind: None,
+            error_message: Some("Connection timed out".to_string()),
+        },
+    };
+
+    let result = report_delivery(&pool, &config, &report_req)
+        .await
+        .expect("report_delivery should succeed");
+
+    assert_eq!(
+        result.final_outcome,
+        ReportOutcome::Dead,
+        "final_outcome should be Dead when max_attempts exhausted"
+    );
+
+    let event_row = sqlx::query_as::<_, (String, i64, Option<String>)>(
+        "SELECT status, attempts, last_error FROM webhook_events WHERE id = ?",
+    )
+    .bind(event_id.to_string())
+    .fetch_one(&pool)
+    .await
+    .expect("event should exist");
+
+    assert_eq!(event_row.0, "dead", "status should be dead");
+    assert_eq!(event_row.1, 5, "attempts should be 5");
+    assert!(
+        event_row.2.as_ref().unwrap().contains("max_attempts_exceeded"),
+        "last_error should contain max_attempts_exceeded"
+    );
+}
+
+#[tokio::test]
+async fn report_under_max_attempts_preserves_retry() {
+    let test_db = setup_db_shared(1).await;
+    let pool = test_db.pool;
+    let endpoint_id = seed_endpoint(&pool).await;
+
+    let now = Utc::now();
+    let lease_expires_at = (now + Duration::hours(1)).to_rfc3339();
+    let next_attempt_at = (now + Duration::minutes(5)).to_rfc3339();
+
+    let event_id = seed_event_with_attempts(
+        &pool,
+        endpoint_id,
+        "in_flight",
+        None,
+        Some(&lease_expires_at),
+        Some("test-worker"),
+        2,
+    )
+    .await;
+
+    let config = DispatcherConfig {
+        max_attempts: 5,
+        ..Default::default()
+    };
+
+    let report_req = ReportRequest {
+        worker_id: "test-worker".to_string(),
+        event_id,
+        outcome: ReportOutcome::Retry,
+        retryable: true,
+        next_attempt_at: Some(next_attempt_at.clone()),
+        attempt: ReportAttempt {
+            started_at: now.to_rfc3339(),
+            finished_at: now.to_rfc3339(),
+            request_headers: BTreeMap::new(),
+            request_body: "{}".to_string(),
+            response_status: Some(503),
+            response_headers: None,
+            response_body: None,
+            error_kind: None,
+            error_message: Some("Server error".to_string()),
+        },
+    };
+
+    let result = report_delivery(&pool, &config, &report_req)
+        .await
+        .expect("report_delivery should succeed");
+
+    assert_eq!(
+        result.final_outcome,
+        ReportOutcome::Retry,
+        "final_outcome should be Retry when under max_attempts"
+    );
+
+    let event_row = sqlx::query_as::<_, (String, i64)>(
+        "SELECT status, attempts FROM webhook_events WHERE id = ?",
+    )
+    .bind(event_id.to_string())
+    .fetch_one(&pool)
+    .await
+    .expect("event should exist");
+
+    assert_eq!(event_row.0, "pending", "status should be pending for retry");
+    assert_eq!(event_row.1, 3, "attempts should be 3");
+}
+
+#[tokio::test]
+async fn report_max_attempts_overrides_delivered() {
+    let test_db = setup_db_shared(1).await;
+    let pool = test_db.pool;
+    let endpoint_id = seed_endpoint(&pool).await;
+
+    let now = Utc::now();
+    let lease_expires_at = (now + Duration::hours(1)).to_rfc3339();
+
+    let event_id = seed_event_with_attempts(
+        &pool,
+        endpoint_id,
+        "in_flight",
+        None,
+        Some(&lease_expires_at),
+        Some("test-worker"),
+        4,
+    )
+    .await;
+
+    let config = DispatcherConfig {
+        max_attempts: 5,
+        ..Default::default()
+    };
+
+    let report_req = ReportRequest {
+        worker_id: "test-worker".to_string(),
+        event_id,
+        outcome: ReportOutcome::Delivered,
+        retryable: false,
+        next_attempt_at: None,
+        attempt: ReportAttempt {
+            started_at: now.to_rfc3339(),
+            finished_at: now.to_rfc3339(),
+            request_headers: BTreeMap::new(),
+            request_body: "{}".to_string(),
+            response_status: Some(200),
+            response_headers: None,
+            response_body: Some(r#"{"ok":true}"#.to_string()),
+            error_kind: None,
+            error_message: None,
+        },
+    };
+
+    let result = report_delivery(&pool, &config, &report_req)
+        .await
+        .expect("report_delivery should succeed");
+
+    assert_eq!(
+        result.final_outcome,
+        ReportOutcome::Dead,
+        "final_outcome should be Dead when max_attempts exhausted"
+    );
+
+    let event_row = sqlx::query_as::<_, (String, i64, Option<String>)>(
+        "SELECT status, attempts, last_error FROM webhook_events WHERE id = ?",
+    )
+    .bind(event_id.to_string())
+    .fetch_one(&pool)
+    .await
+    .expect("event should exist");
+
+    assert_eq!(event_row.0, "dead", "status should be dead");
+    assert_eq!(event_row.1, 5, "attempts should be 5");
+    assert!(
+        event_row.2.as_ref().unwrap().contains("max_attempts_exceeded"),
+        "last_error should contain max_attempts_exceeded"
+    );
+}
+
+#[tokio::test]
+async fn report_final_outcome_returned_in_result() {
+    let test_db = setup_db_shared(1).await;
+    let pool = test_db.pool;
+    let endpoint_id = seed_endpoint(&pool).await;
+
+    let now = Utc::now();
+    let lease_expires_at = (now + Duration::hours(1)).to_rfc3339();
+
+    let event_id = seed_event(&pool, endpoint_id, "in_flight", None, Some(&lease_expires_at), Some("worker")).await;
+
+    let config = DispatcherConfig::default();
+    let report_req = ReportRequest {
+        worker_id: "worker".to_string(),
+        event_id,
+        outcome: ReportOutcome::Delivered,
+        retryable: false,
+        next_attempt_at: None,
+        attempt: ReportAttempt {
+            started_at: now.to_rfc3339(),
+            finished_at: now.to_rfc3339(),
+            request_headers: BTreeMap::new(),
+            request_body: "{}".to_string(),
+            response_status: Some(200),
+            response_headers: None,
+            response_body: None,
+            error_kind: None,
+            error_message: None,
+        },
+    };
+
+    let result = report_delivery(&pool, &config, &report_req)
+        .await
+        .expect("report should succeed");
+
+    assert_eq!(result.final_outcome, ReportOutcome::Delivered, "final_outcome should match reported outcome");
 }

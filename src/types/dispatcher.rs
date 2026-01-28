@@ -52,7 +52,7 @@ pub struct ReportAttempt {
     pub error_message: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ReportOutcome {
     Delivered,

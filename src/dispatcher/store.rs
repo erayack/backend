@@ -216,13 +216,13 @@ pub async fn report_delivery(
     let retryable = req.retryable;
 
     let exhausted = attempt_no >= config.max_attempts as i64;
-    let final_outcome = if exhausted && matches!(req.outcome, ReportOutcome::Retry) {
+    let final_outcome = if exhausted {
         ReportOutcome::Dead
     } else {
         req.outcome
     };
 
-    let last_error_for_exhausted = if exhausted && matches!(req.outcome, ReportOutcome::Retry) {
+    let last_error_for_exhausted = if exhausted {
         Some(format!(
             "max_attempts_exceeded ({}): {}",
             config.max_attempts,
