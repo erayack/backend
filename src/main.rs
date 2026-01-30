@@ -1,6 +1,5 @@
 use axum::{
-    Router,
-    middleware,
+    Router, middleware,
     routing::{get, post},
 };
 use receiver::{
@@ -14,8 +13,9 @@ use receiver::{
     },
     state::AppState,
 };
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::net::SocketAddr;
+use std::str::FromStr;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,13 +28,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
 
+    let connect_options = SqliteConnectOptions::from_str(&database_url)?.create_if_missing(true);
+
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
-        .connect(&database_url)
-        .await?;
-
-    sqlx::query("PRAGMA foreign_keys = ON;")
-        .execute(&pool)
+        .connect_with(connect_options)
         .await?;
 
     sqlx::migrate!("./migrations").run(&pool).await?;

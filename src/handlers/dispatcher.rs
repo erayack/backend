@@ -4,13 +4,14 @@ use chrono::DateTime;
 use crate::{
     dispatcher::{StoreError, lease_events, report_delivery},
     error::ApiError,
+    extractors::ValidJson,
     state::AppState,
     types::{LeaseRequest, LeaseResponse, ReportRequest, ReportResponse},
 };
 
 pub async fn lease_handler(
     State(state): State<AppState>,
-    Json(req): Json<LeaseRequest>,
+    ValidJson(req): ValidJson<LeaseRequest>,
 ) -> Result<Json<LeaseResponse>, ApiError> {
     validate_request(&req)?;
 
@@ -23,7 +24,7 @@ pub async fn lease_handler(
 
 pub async fn report_handler(
     State(state): State<AppState>,
-    Json(req): Json<ReportRequest>,
+    ValidJson(req): ValidJson<ReportRequest>,
 ) -> Result<Json<ReportResponse>, ApiError> {
     validate_report_request(&req)?;
 
@@ -39,13 +40,13 @@ pub async fn report_handler(
 
 fn validate_request(req: &LeaseRequest) -> Result<(), ApiError> {
     if req.limit <= 0 {
-        return Err(ApiError::BadRequest("limit must be > 0".to_string()));
+        return Err(ApiError::validation("limit must be > 0"));
     }
     if req.lease_ms <= 0 {
-        return Err(ApiError::BadRequest("lease_ms must be > 0".to_string()));
+        return Err(ApiError::validation("lease_ms must be > 0"));
     }
     if req.worker_id.trim().is_empty() {
-        return Err(ApiError::BadRequest("worker_id is required".to_string()));
+        return Err(ApiError::validation("worker_id is required"));
     }
 
     Ok(())
@@ -53,20 +54,20 @@ fn validate_request(req: &LeaseRequest) -> Result<(), ApiError> {
 
 fn validate_report_request(req: &ReportRequest) -> Result<(), ApiError> {
     if req.worker_id.trim().is_empty() {
-        return Err(ApiError::BadRequest("worker_id is required".to_string()));
+        return Err(ApiError::validation("worker_id is required"));
     }
     let started_at_raw = req.attempt.started_at.trim();
     let finished_at_raw = req.attempt.finished_at.trim();
     if started_at_raw.is_empty() || finished_at_raw.is_empty() {
-        return Err(ApiError::BadRequest(
-            "attempt started_at and finished_at are required".to_string(),
+        return Err(ApiError::validation(
+            "attempt started_at and finished_at are required",
         ));
     }
     let started_at = parse_rfc3339("attempt started_at", started_at_raw)?;
     let finished_at = parse_rfc3339("attempt finished_at", finished_at_raw)?;
     if finished_at < started_at {
-        return Err(ApiError::BadRequest(
-            "attempt finished_at must be >= started_at".to_string(),
+        return Err(ApiError::validation(
+            "attempt finished_at must be >= started_at",
         ));
     }
     if let Some(value) = req.next_attempt_at.as_deref() {
@@ -77,14 +78,14 @@ fn validate_report_request(req: &ReportRequest) -> Result<(), ApiError> {
 
 fn parse_rfc3339(field: &str, value: &str) -> Result<DateTime<chrono::FixedOffset>, ApiError> {
     DateTime::parse_from_rfc3339(value)
-        .map_err(|_| ApiError::BadRequest(format!("{field} must be RFC3339")))
+        .map_err(|_| ApiError::validation(format!("{field} must be RFC3339")))
 }
 
 fn map_store_error(err: StoreError) -> ApiError {
     match err {
-        StoreError::Conflict(message) => ApiError::Conflict(message),
+        StoreError::Conflict(message) => ApiError::conflict(message),
         StoreError::Db(db) => ApiError::Db(db),
-        StoreError::NotFound(message) => ApiError::NotFound(message),
-        StoreError::Parse(message) => ApiError::Internal(message),
+        StoreError::NotFound(message) => ApiError::not_found(message),
+        StoreError::Parse(message) => ApiError::internal(message),
     }
 }

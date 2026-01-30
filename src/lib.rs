@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod dispatcher;
 pub mod error;
+pub mod extractors;
 pub mod handlers;
 pub mod inspector;
 pub mod state;

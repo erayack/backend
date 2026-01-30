@@ -1,9 +1,12 @@
+pub mod api_error;
 pub mod dispatcher;
 pub mod inspector;
 pub mod target_circuit_state;
 pub mod webhook_attempt_log;
 pub mod webhook_event;
 
+#[allow(unused_imports)]
+pub use api_error::{ApiErrorCode, ApiErrorResponse};
 #[allow(unused_imports)]
 pub use dispatcher::{
     LeaseRequest, LeaseResponse, LeasedEvent, ReportAttempt, ReportOutcome, ReportRequest,

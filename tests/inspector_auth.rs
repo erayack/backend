@@ -73,12 +73,9 @@ async fn dummy_handler() -> &'static str {
 }
 
 fn build_app(state: AppState) -> Router {
-    let protected_router = Router::new()
-        .route("/protected", get(dummy_handler))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            inspector_auth,
-        ));
+    let protected_router = Router::new().route("/protected", get(dummy_handler)).layer(
+        middleware::from_fn_with_state(state.clone(), inspector_auth),
+    );
 
     let unprotected_router = Router::new().route("/internal/dispatcher/lease", post(dummy_handler));
 

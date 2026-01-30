@@ -40,6 +40,7 @@ fn main() {
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/types/mod.rs");
+    println!("cargo:rerun-if-changed=src/types/api_error.rs");
     println!("cargo:rerun-if-changed=src/types/webhook_event.rs");
     println!("cargo:rerun-if-changed=src/types/webhook_attempt_log.rs");
     println!("cargo:rerun-if-changed=src/types/target_circuit_state.rs");
