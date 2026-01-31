@@ -98,19 +98,32 @@ async fn seed_event(
     status: &str,
     received_at: &str,
 ) -> Uuid {
+    seed_event_with_replay(pool, endpoint_id, provider, status, received_at, None).await
+}
+
+async fn seed_event_with_replay(
+    pool: &SqlitePool,
+    endpoint_id: Uuid,
+    provider: &str,
+    status: &str,
+    received_at: &str,
+    replayed_from_event_id: Option<Uuid>,
+) -> Uuid {
     let id = Uuid::new_v4();
     let headers = serde_json::to_string(&BTreeMap::<String, String>::new()).unwrap();
+    let replayed_from_event_id = replayed_from_event_id.map(|event_id| event_id.to_string());
     sqlx::query(
         r#"
         INSERT INTO webhook_events (
-            id, endpoint_id, provider, headers, payload,
+            id, endpoint_id, replayed_from_event_id, provider, headers, payload,
             status, attempts, received_at, next_attempt_at,
             lease_expires_at, leased_by, last_error
-        ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, NULL, NULL, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, NULL, NULL, NULL)
         "#,
     )
     .bind(id.to_string())
     .bind(endpoint_id.to_string())
+    .bind(replayed_from_event_id)
     .bind(provider)
     .bind(&headers)
     .bind(r#"{"secret":"data"}"#)
@@ -180,6 +193,55 @@ async fn list_events_returns_summary_without_payload() {
     let item = &result.events[0];
     assert_eq!(item.event.provider, "stripe");
     assert_eq!(item.event.status, WebhookEventStatus::Pending);
+}
+
+#[tokio::test]
+async fn list_events_includes_replayed_from_event_id() {
+    let db = setup_db().await;
+    let endpoint_id = seed_endpoint(&db.pool, "https://example.com/hook").await;
+    let base = Utc::now();
+    let source_id = seed_event(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "pending",
+        &base.to_rfc3339(),
+    )
+    .await;
+    let replayed_at = (base + Duration::seconds(1)).to_rfc3339();
+    let replay_id = seed_event_with_replay(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "pending",
+        &replayed_at,
+        Some(source_id),
+    )
+    .await;
+
+    let params = ListEventsParams {
+        limit: 50,
+        before: None,
+        status: None,
+        endpoint_id: None,
+        provider: None,
+    };
+
+    let result = list_events(&db.pool, &params).await.expect("list_events");
+
+    let source = result
+        .events
+        .iter()
+        .find(|item| item.event.id == source_id)
+        .expect("source event");
+    assert!(source.event.replayed_from_event_id.is_none());
+
+    let replayed = result
+        .events
+        .iter()
+        .find(|item| item.event.id == replay_id)
+        .expect("replay event");
+    assert_eq!(replayed.event.replayed_from_event_id, Some(source_id));
 }
 
 #[tokio::test]
@@ -543,6 +605,36 @@ async fn get_event_returns_full_payload() {
     assert_eq!(result.event.provider, "stripe");
     assert_eq!(result.event.payload, r#"{"secret":"data"}"#);
     assert!(result.event.headers.is_empty());
+    assert!(result.event.replayed_from_event_id.is_none());
+}
+
+#[tokio::test]
+async fn get_event_replayed_from_event_id_set() {
+    let db = setup_db().await;
+    let endpoint_id = seed_endpoint(&db.pool, "https://example.com/hook").await;
+    let base = Utc::now();
+    let source_id = seed_event(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "pending",
+        &base.to_rfc3339(),
+    )
+    .await;
+    let replayed_at = (base + Duration::seconds(1)).to_rfc3339();
+    let replay_id = seed_event_with_replay(
+        &db.pool,
+        endpoint_id,
+        "stripe",
+        "pending",
+        &replayed_at,
+        Some(source_id),
+    )
+    .await;
+
+    let result = get_event(&db.pool, replay_id).await.expect("get_event");
+
+    assert_eq!(result.event.replayed_from_event_id, Some(source_id));
 }
 
 #[tokio::test]

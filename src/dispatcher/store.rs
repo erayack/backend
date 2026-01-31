@@ -112,6 +112,7 @@ pub async fn lease_events(
         "SELECT \
             e.id, \
             e.endpoint_id, \
+            e.replayed_from_event_id, \
             e.provider, \
             e.headers, \
             e.payload, \
@@ -411,6 +412,7 @@ pub async fn report_delivery(
 struct LeaseRow {
     id: String,
     endpoint_id: String,
+    replayed_from_event_id: Option<String>,
     provider: String,
     headers: String,
     payload: String,
@@ -438,12 +440,21 @@ impl TryFrom<LeaseRow> for LeasedEvent {
         let lease_expires_at = row
             .lease_expires_at
             .ok_or_else(|| StoreError::Parse("missing lease_expires_at".to_string()))?;
+        let replayed_from_event_id = match row.replayed_from_event_id {
+            Some(value) if value.is_empty() => None,
+            Some(value) => Some(
+                Uuid::parse_str(&value)
+                    .map_err(|err| StoreError::Parse(format!("invalid replayed_from_event_id: {err}")))?,
+            ),
+            None => None,
+        };
 
         let event = WebhookEvent {
             id: Uuid::parse_str(&row.id)
                 .map_err(|err| StoreError::Parse(format!("invalid event id: {err}")))?,
             endpoint_id: Uuid::parse_str(&row.endpoint_id)
                 .map_err(|err| StoreError::Parse(format!("invalid endpoint id: {err}")))?,
+            replayed_from_event_id,
             provider: row.provider,
             headers,
             payload: row.payload,

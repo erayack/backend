@@ -8,6 +8,7 @@ use uuid::Uuid;
 pub struct WebhookEventSummary {
     pub id: Uuid,
     pub endpoint_id: Uuid,
+    pub replayed_from_event_id: Option<Uuid>,
     pub provider: String,
     pub status: WebhookEventStatus,
     pub attempts: i64,

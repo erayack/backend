@@ -53,6 +53,7 @@ pub async fn list_events(
         "SELECT \
             e.id, \
             e.endpoint_id, \
+            e.replayed_from_event_id, \
             e.provider, \
             e.status, \
             e.attempts, \
@@ -137,6 +138,7 @@ pub async fn get_event(pool: &SqlitePool, event_id: Uuid) -> Result<GetEventResp
             e.attempts,
             e.received_at,
             e.next_attempt_at,
+            e.replayed_from_event_id,
             e.lease_expires_at,
             e.leased_by,
             e.last_error,
@@ -250,6 +252,7 @@ pub async fn replay_event(
         INSERT INTO webhook_events (
             id,
             endpoint_id,
+            replayed_from_event_id,
             provider,
             headers,
             payload,
@@ -261,11 +264,12 @@ pub async fn replay_event(
             leased_by,
             last_error
         )
-        VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, NULL, NULL)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, NULL, NULL)
         ",
     )
     .bind(new_event_id.to_string())
     .bind(&row.endpoint_id)
+    .bind(event_id.to_string())
     .bind(&row.provider)
     .bind(&row.headers)
     .bind(&row.payload)
@@ -312,6 +316,7 @@ pub async fn replay_event(
         id: new_event_id,
         endpoint_id: Uuid::parse_str(&row.endpoint_id)
             .map_err(|err| StoreError::Parse(format!("invalid endpoint id: {err}")))?,
+        replayed_from_event_id: Some(event_id),
         provider: row.provider,
         status: WebhookEventStatus::Pending,
         attempts: 0,
@@ -338,6 +343,7 @@ pub async fn replay_event(
 struct ListEventRow {
     id: String,
     endpoint_id: String,
+    replayed_from_event_id: Option<String>,
     provider: String,
     status: String,
     attempts: i64,
@@ -355,6 +361,7 @@ struct ListEventRow {
 struct GetEventRow {
     id: String,
     endpoint_id: String,
+    replayed_from_event_id: Option<String>,
     provider: String,
     headers: String,
     payload: String,
@@ -419,10 +426,19 @@ fn list_item_from_row(
         .map_err(|err| StoreError::Parse(format!("invalid event id: {err}")))?;
     let endpoint_id = Uuid::parse_str(&row.endpoint_id)
         .map_err(|err| StoreError::Parse(format!("invalid endpoint id: {err}")))?;
+    let replayed_from_event_id = match row.replayed_from_event_id {
+        Some(value) if value.is_empty() => None,
+        Some(value) => Some(
+            Uuid::parse_str(&value)
+                .map_err(|err| StoreError::Parse(format!("invalid replayed_from_event_id: {err}")))?,
+        ),
+        None => None,
+    };
 
     let event = WebhookEventSummary {
         id: event_id,
         endpoint_id,
+        replayed_from_event_id,
         provider: row.provider,
         status,
         attempts: row.attempts,
@@ -462,6 +478,14 @@ fn get_event_from_row(row: GetEventRow) -> Result<GetEventResponse, StoreError> 
             .map_err(|err| StoreError::Parse(format!("invalid event id: {err}")))?,
         endpoint_id: Uuid::parse_str(&row.endpoint_id)
             .map_err(|err| StoreError::Parse(format!("invalid endpoint id: {err}")))?,
+        replayed_from_event_id: match row.replayed_from_event_id {
+            Some(value) if value.is_empty() => None,
+            Some(value) => Some(
+                Uuid::parse_str(&value)
+                    .map_err(|err| StoreError::Parse(format!("invalid replayed_from_event_id: {err}")))?,
+            ),
+            None => None,
+        },
         provider: row.provider,
         headers,
         payload: row.payload,
